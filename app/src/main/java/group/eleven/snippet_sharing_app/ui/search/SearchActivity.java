@@ -88,10 +88,16 @@ public class SearchActivity extends AppCompatActivity {
         layoutEmpty = findViewById(R.id.layoutEmpty);
 
         adapter.setOnUserClickListener(user -> {
-            String uname = user.getUsername();
-            if (uname != null) {
+            if (user.getUsername() != null) {
                 Intent intent = new Intent(this, UserProfileActivity.class);
-                intent.putExtra(UserProfileActivity.EXTRA_USERNAME, uname);
+                intent.putExtra(UserProfileActivity.EXTRA_USERNAME, user.getUsername());
+                intent.putExtra(UserProfileActivity.EXTRA_USER_ID, user.getId());
+                intent.putExtra(UserProfileActivity.EXTRA_FULL_NAME, user.getFullName());
+                intent.putExtra(UserProfileActivity.EXTRA_BIO, user.getBio());
+                intent.putExtra(UserProfileActivity.EXTRA_AVATAR_URL, user.getEffectiveAvatarUrl());
+                intent.putExtra(UserProfileActivity.EXTRA_FOLLOWERS, user.getFollowersCount());
+                intent.putExtra(UserProfileActivity.EXTRA_FOLLOWING, user.getFollowingCount());
+                intent.putExtra(UserProfileActivity.EXTRA_IS_FOLLOWING, user.isFollowing());
                 startActivity(intent);
             }
         });

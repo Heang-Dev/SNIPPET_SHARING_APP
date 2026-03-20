@@ -152,10 +152,10 @@ public class SnippetDetailActivity extends AppCompatActivity {
             }
 
             // Author click → view profile
-            if (user.getUsername() != null) {
-                ivAuthorAvatar.setOnClickListener(v -> openUserProfile(user.getUsername()));
-                tvAuthorName.setOnClickListener(v -> openUserProfile(user.getUsername()));
-            }
+        if (user.getUsername() != null) {
+            ivAuthorAvatar.setOnClickListener(v -> openUserProfile(user));
+            tvAuthorName.setOnClickListener(v -> openUserProfile(user));
+        }
         }
 
         // Follow button
@@ -163,9 +163,17 @@ public class SnippetDetailActivity extends AppCompatActivity {
         String currentUserId = sessionManager.getUser() != null ? sessionManager.getUser().getId() : null;
         if (user != null && currentUserId != null && !currentUserId.equals(user.getId())) {
             btnFollow.setVisibility(View.VISIBLE);
+            updateFollowButton(btnFollow);
             btnFollow.setOnClickListener(v -> toggleFollow(user.getUsername(), btnFollow));
         } else {
             btnFollow.setVisibility(View.GONE);
+        }
+
+        // Posted date
+        TextView tvPostedDate = findViewById(R.id.tvPostedDate);
+        if (tvPostedDate != null) {
+            String createdAt = snippet.getCreatedAt();
+            tvPostedDate.setText(formatDate(createdAt));
         }
 
         // Title & Description
@@ -273,9 +281,15 @@ public class SnippetDetailActivity extends AppCompatActivity {
         actionBar.setVisibility(View.VISIBLE);
     }
 
-    private void openUserProfile(String username) {
-        Intent intent = new Intent(this, UserProfileActivity.class);
-        intent.putExtra(UserProfileActivity.EXTRA_USERNAME, username);
+    private void openUserProfile(Snippet.SnippetUser user) {
+        if (user == null || user.getUsername() == null) return;
+        Intent intent = new Intent(this, group.eleven.snippet_sharing_app.ui.search.UserProfileActivity.class);
+        intent.putExtra(group.eleven.snippet_sharing_app.ui.search.UserProfileActivity.EXTRA_USERNAME, user.getUsername());
+        intent.putExtra(group.eleven.snippet_sharing_app.ui.search.UserProfileActivity.EXTRA_USER_ID, user.getId());
+        String name = user.getFullName();
+        if (name == null || name.isEmpty()) name = user.getUsername();
+        intent.putExtra(group.eleven.snippet_sharing_app.ui.search.UserProfileActivity.EXTRA_FULL_NAME, name);
+        intent.putExtra(group.eleven.snippet_sharing_app.ui.search.UserProfileActivity.EXTRA_AVATAR_URL, user.getAvatarUrl());
         startActivity(intent);
     }
 
@@ -450,5 +464,37 @@ public class SnippetDetailActivity extends AppCompatActivity {
     private void hideLoading() {
         FrameLayout layoutLoading = findViewById(R.id.layoutLoading);
         if (layoutLoading != null) layoutLoading.setVisibility(View.GONE);
+    }
+
+    private String formatDate(String isoDate) {
+        if (isoDate == null || isoDate.isEmpty()) return "";
+        try {
+            java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US);
+            sdf.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+            java.util.Date date = sdf.parse(isoDate);
+            if (date == null) return "";
+            long diff = System.currentTimeMillis() - date.getTime();
+            long minutes = diff / 60000;
+            if (minutes < 1) return "just now";
+            if (minutes < 60) return minutes + "m ago";
+            long hours = minutes / 60;
+            if (hours < 24) return hours + "h ago";
+            long days = hours / 24;
+            if (days < 7) return days + "d ago";
+            java.text.SimpleDateFormat out = new java.text.SimpleDateFormat("MMM d, yyyy", java.util.Locale.US);
+            return out.format(date);
+        } catch (Exception e) {
+            // Try without milliseconds
+            try {
+                java.text.SimpleDateFormat sdf2 = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US);
+                sdf2.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+                java.util.Date date = sdf2.parse(isoDate);
+                if (date == null) return "";
+                java.text.SimpleDateFormat out = new java.text.SimpleDateFormat("MMM d, yyyy", java.util.Locale.US);
+                return out.format(date);
+            } catch (Exception ex) {
+                return "";
+            }
+        }
     }
 }

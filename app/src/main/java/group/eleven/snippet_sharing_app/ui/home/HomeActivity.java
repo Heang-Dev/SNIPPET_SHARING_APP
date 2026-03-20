@@ -327,8 +327,15 @@ public class HomeActivity extends AppCompatActivity implements NavigationView.On
 
             @Override
             public void onAuthorClick(SnippetCard snippet) {
-                Toast.makeText(HomeActivity.this, "View Profile: " + snippet.getAuthorName(), Toast.LENGTH_SHORT).show();
-                // TODO: Navigate to user profile
+                String authorUsername = snippet.getAuthorUsername();
+                if (authorUsername != null && !authorUsername.isEmpty()) {
+                    Intent intent = new Intent(HomeActivity.this,
+                            group.eleven.snippet_sharing_app.ui.search.UserProfileActivity.class);
+                    intent.putExtra(group.eleven.snippet_sharing_app.ui.search.UserProfileActivity.EXTRA_USERNAME, authorUsername);
+                    intent.putExtra(group.eleven.snippet_sharing_app.ui.search.UserProfileActivity.EXTRA_FULL_NAME, snippet.getAuthorName());
+                    intent.putExtra(group.eleven.snippet_sharing_app.ui.search.UserProfileActivity.EXTRA_AVATAR_URL, snippet.getAuthorAvatar());
+                    startActivity(intent);
+                }
             }
 
             @Override

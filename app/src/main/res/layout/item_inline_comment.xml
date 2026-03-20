@@ -8,12 +8,12 @@
     android:paddingStart="16dp"
     android:paddingTop="10dp"
     android:paddingEnd="16dp"
-    android:paddingBottom="10dp">
+    android:paddingBottom="2dp">
 
     <de.hdodenhof.circleimageview.CircleImageView
         android:id="@+id/ivCommentItemAvatar"
-        android:layout_width="32dp"
-        android:layout_height="32dp"
+        android:layout_width="34dp"
+        android:layout_height="34dp"
         android:src="@drawable/ic_person"
         app:civ_border_color="?attr/borderColor"
         app:civ_border_width="1dp" />
@@ -23,9 +23,12 @@
         android:layout_height="wrap_content"
         android:layout_marginStart="10dp"
         android:layout_weight="1"
-        android:background="@drawable/bg_tag_chip"
+        android:background="@drawable/bg_comment_input"
         android:orientation="vertical"
-        android:padding="10dp">
+        android:paddingStart="12dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="12dp"
+        android:paddingBottom="8dp">
 
         <TextView
             android:id="@+id/tvCommentAuthor"
@@ -39,7 +42,7 @@
             android:id="@+id/tvCommentBody"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
+            android:layout_marginTop="3dp"
             android:lineSpacingExtra="2dp"
             android:textColor="?attr/textSecondaryColor"
             android:textSize="13sp" />
