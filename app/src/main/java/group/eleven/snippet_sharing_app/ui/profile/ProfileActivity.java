@@ -29,11 +29,15 @@ import java.util.Random;
 
 import de.hdodenhof.circleimageview.CircleImageView;
 import group.eleven.snippet_sharing_app.R;
+import group.eleven.snippet_sharing_app.data.model.Collection;
 import group.eleven.snippet_sharing_app.data.model.SnippetCard;
 import group.eleven.snippet_sharing_app.data.model.User;
+import group.eleven.snippet_sharing_app.data.repository.CollectionsRepository;
 import group.eleven.snippet_sharing_app.data.repository.DashboardRepository;
+import group.eleven.snippet_sharing_app.data.repository.FavoritesRepository;
 import group.eleven.snippet_sharing_app.ui.home.FeedSnippetAdapter;
 import group.eleven.snippet_sharing_app.ui.notification.NotificationsActivity;
+import group.eleven.snippet_sharing_app.ui.snippet.CollectionDetailActivity;
 import group.eleven.snippet_sharing_app.utils.Resource;
 import group.eleven.snippet_sharing_app.utils.SessionManager;
 
@@ -66,7 +70,10 @@ public class ProfileActivity extends AppCompatActivity {
     // Data
     private SessionManager sessionManager;
     private DashboardRepository dashboardRepository;
+    private FavoritesRepository favoritesRepository;
+    private CollectionsRepository collectionsRepository;
     private FeedSnippetAdapter adapter;
+    private CollectionAdapter collectionAdapter;
     private String currentTab = "snippets";
 
     @Override
@@ -76,6 +83,8 @@ public class ProfileActivity extends AppCompatActivity {
 
         sessionManager = new SessionManager(this);
         dashboardRepository = new DashboardRepository(this);
+        favoritesRepository = new FavoritesRepository(this);
+        collectionsRepository = new CollectionsRepository(this);
 
         setupStatusBar();
         initViews();
@@ -267,7 +276,13 @@ public class ProfileActivity extends AppCompatActivity {
         adapter.setOnFeedItemClickListener(new FeedSnippetAdapter.OnFeedItemClickListener() {
             @Override
             public void onSnippetClick(SnippetCard snippet) {
-                // TODO: Navigate to snippet detail
+                String id = snippet.getSlug() != null ? snippet.getSlug() : snippet.getId();
+                if (id != null) {
+                    Intent intent = new Intent(ProfileActivity.this,
+                            group.eleven.snippet_sharing_app.ui.snippet.SnippetDetailActivity.class);
+                    intent.putExtra(group.eleven.snippet_sharing_app.ui.snippet.SnippetDetailActivity.EXTRA_SNIPPET_ID, id);
+                    startActivity(intent);
+                }
             }
 
             @Override
@@ -297,6 +312,14 @@ public class ProfileActivity extends AppCompatActivity {
                 // TODO: Show options menu
             }
         });
+        collectionAdapter = new CollectionAdapter();
+        collectionAdapter.setOnCollectionClickListener(collection -> {
+            Intent intent = new Intent(ProfileActivity.this, CollectionDetailActivity.class);
+            intent.putExtra(CollectionDetailActivity.EXTRA_COLLECTION_ID, collection.getId());
+            intent.putExtra(CollectionDetailActivity.EXTRA_COLLECTION_NAME, collection.getName());
+            startActivity(intent);
+        });
+
         rvContent.setLayoutManager(new LinearLayoutManager(this));
         rvContent.setAdapter(adapter);
         rvContent.setNestedScrollingEnabled(false);
@@ -438,19 +461,18 @@ public class ProfileActivity extends AppCompatActivity {
             case "stars":
                 tvEmptyTitle.setText("No starred snippets");
                 tvEmptyMessage.setText("Star snippets to save them for later!");
+                rvContent.setAdapter(adapter);
                 loadFavorites();
                 break;
             case "collections":
                 tvEmptyTitle.setText("No collections yet");
                 tvEmptyMessage.setText("Create collections to organize your snippets!");
-                // TODO: Implement collections API call
-                showLoading(false);
-                adapter.setSnippets(new ArrayList<>());
-                updateContentVisibility(true);
+                loadCollections();
                 break;
             default: // snippets
                 tvEmptyTitle.setText("No snippets yet");
                 tvEmptyMessage.setText("Create your first snippet to share!");
+                rvContent.setAdapter(adapter);
                 loadMySnippets();
                 break;
         }
@@ -472,11 +494,30 @@ public class ProfileActivity extends AppCompatActivity {
     }
 
     private void loadFavorites() {
-        // TODO: Implement actual favorites API call
-        showLoading(false);
-        // Show empty state until favorites API is implemented
-        adapter.setSnippets(new ArrayList<>());
-        updateContentVisibility(true);
+        favoritesRepository.getFavoriteSnippets(30).observe(this, resource -> {
+            showLoading(false);
+            if (resource.status == Resource.Status.SUCCESS && resource.data != null) {
+                adapter.setSnippets(resource.data);
+                updateContentVisibility(resource.data.isEmpty());
+            } else if (resource.status == Resource.Status.ERROR) {
+                adapter.setSnippets(new ArrayList<>());
+                updateContentVisibility(true);
+            }
+        });
+    }
+
+    private void loadCollections() {
+        rvContent.setAdapter(collectionAdapter);
+        collectionsRepository.getMyCollections().observe(this, resource -> {
+            showLoading(false);
+            if (resource.status == Resource.Status.SUCCESS && resource.data != null) {
+                collectionAdapter.setCollections(resource.data);
+                updateContentVisibility(resource.data.isEmpty());
+            } else if (resource.status == Resource.Status.ERROR) {
+                collectionAdapter.setCollections(new ArrayList<>());
+                updateContentVisibility(true);
+            }
+        });
     }
 
     private void updateContentVisibility(boolean isEmpty) {

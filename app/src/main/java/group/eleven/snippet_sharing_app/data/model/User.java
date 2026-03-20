@@ -102,6 +102,10 @@ public class User {
     @SerializedName("updated_at")
     private String updatedAt;
 
+    // Follow state (returned in followers/following list responses)
+    @SerializedName("is_following")
+    private boolean isFollowing;
+
     // Getters
     public String getId() {
         return id;
@@ -237,6 +241,14 @@ public class User {
 
     public boolean isEmailVerified() {
         return emailVerifiedAt != null && !emailVerifiedAt.isEmpty();
+    }
+
+    public boolean isFollowing() {
+        return isFollowing;
+    }
+
+    public void setFollowing(boolean following) {
+        isFollowing = following;
     }
 
     /**

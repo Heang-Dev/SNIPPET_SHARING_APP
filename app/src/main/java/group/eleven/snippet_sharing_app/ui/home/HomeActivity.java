@@ -284,8 +284,13 @@ public class HomeActivity extends AppCompatActivity implements NavigationView.On
         feedAdapter.setOnFeedItemClickListener(new FeedSnippetAdapter.OnFeedItemClickListener() {
             @Override
             public void onSnippetClick(SnippetCard snippet) {
-                Toast.makeText(HomeActivity.this, "View: " + snippet.getTitle(), Toast.LENGTH_SHORT).show();
-                // TODO: Navigate to snippet detail
+                String id = snippet.getSlug() != null ? snippet.getSlug() : snippet.getId();
+                if (id != null) {
+                    Intent intent = new Intent(HomeActivity.this,
+                            group.eleven.snippet_sharing_app.ui.snippet.SnippetDetailActivity.class);
+                    intent.putExtra(group.eleven.snippet_sharing_app.ui.snippet.SnippetDetailActivity.EXTRA_SNIPPET_ID, id);
+                    startActivity(intent);
+                }
             }
 
             @Override

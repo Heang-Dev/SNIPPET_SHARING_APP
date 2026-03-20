@@ -123,7 +123,13 @@ public class FavoritesActivity extends AppCompatActivity {
         binding.rvFavorites.setLayoutManager(new LinearLayoutManager(this));
         adapter = new SnippetCardAdapter(new ArrayList<>());
         adapter.setOnSnippetClickListener(snippet -> {
-            Toast.makeText(this, "Clicked: " + snippet.getTitle(), Toast.LENGTH_SHORT).show();
+            String id = snippet.getSlug() != null ? snippet.getSlug() : snippet.getId();
+            if (id != null) {
+                Intent intent = new Intent(this,
+                        group.eleven.snippet_sharing_app.ui.snippet.SnippetDetailActivity.class);
+                intent.putExtra(group.eleven.snippet_sharing_app.ui.snippet.SnippetDetailActivity.EXTRA_SNIPPET_ID, id);
+                startActivity(intent);
+            }
         });
         // Tapping the star in Favorites removes the snippet from favorites
         adapter.setOnFavoriteClickListener((snippet, position) -> {

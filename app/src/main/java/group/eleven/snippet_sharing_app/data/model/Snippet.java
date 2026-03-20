@@ -381,7 +381,7 @@ public class Snippet {
             authorName = authorUsername;
         }
 
-        return new SnippetCard(
+        SnippetCard card = new SnippetCard(
                 id,
                 title,
                 description,
@@ -398,5 +398,7 @@ public class Snippet {
                 isFavorited,
                 privacy != null ? privacy : "public"
         );
+        card.setSlug(slug);
+        return card;
     }
 }

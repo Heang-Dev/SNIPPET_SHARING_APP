@@ -11,8 +11,9 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
 import android.widget.EditText;
+import android.widget.FrameLayout;
+import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -21,15 +22,15 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.bumptech.glide.Glide;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import de.hdodenhof.circleimageview.CircleImageView;
 import group.eleven.snippet_sharing_app.R;
-import group.eleven.snippet_sharing_app.data.model.Snippet;
 import group.eleven.snippet_sharing_app.data.model.User;
-import group.eleven.snippet_sharing_app.data.repository.DashboardRepository;
+import group.eleven.snippet_sharing_app.data.repository.FollowRepository;
 import group.eleven.snippet_sharing_app.data.repository.SearchRepository;
-import group.eleven.snippet_sharing_app.model.SearchResult;
 import group.eleven.snippet_sharing_app.ui.profile.ProfileActivity;
 import group.eleven.snippet_sharing_app.utils.KeyboardUtils;
 import group.eleven.snippet_sharing_app.utils.Resource;
@@ -38,17 +39,20 @@ import group.eleven.snippet_sharing_app.utils.SessionManager;
 public class SearchActivity extends AppCompatActivity {
 
     private static final String TAG = "SearchActivity";
-    private static final long SEARCH_DEBOUNCE_MS = 500;
+    private static final long DEBOUNCE_MS = 400;
 
     private RecyclerView rvSearchResults;
-    private SearchResultAdapter adapter;
+    private UserSearchAdapter adapter;
     private EditText etSearch;
     private CircleImageView ivProfile;
     private TextView tvResultCount;
-    private List<SearchResult> allResults;
+    private TextView tvSectionTitle;
+    private FrameLayout layoutLoading;
+    private LinearLayout layoutEmpty;
+
     private SessionManager sessionManager;
     private SearchRepository searchRepository;
-    private DashboardRepository dashboardRepository;
+    private FollowRepository followRepository;
     private Handler searchHandler;
     private Runnable searchRunnable;
 
@@ -57,32 +61,58 @@ public class SearchActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_search);
 
+        sessionManager = new SessionManager(this);
+        searchRepository = new SearchRepository(this);
+        followRepository = new FollowRepository(this);
+        searchHandler = new Handler(Looper.getMainLooper());
+
         initViews();
-
-        // Setup keyboard dismiss on outside touch
-        View rootView = findViewById(android.R.id.content);
-        KeyboardUtils.setupKeyboardDismissOnOutsideTouch(this, rootView);
-
         loadProfileImage();
-        loadInitialSnippets();
         setupListeners();
+        loadSuggestedUsers();
     }
 
     private void initViews() {
-        sessionManager = new SessionManager(this);
-        searchRepository = new SearchRepository(this);
-        dashboardRepository = new DashboardRepository(this);
-        searchHandler = new Handler(Looper.getMainLooper());
-        allResults = new ArrayList<>();
-
         rvSearchResults = findViewById(R.id.rvSearchResults);
         rvSearchResults.setLayoutManager(new LinearLayoutManager(this));
-        adapter = new SearchResultAdapter();
+
+        String currentUserId = sessionManager.getUser() != null ? sessionManager.getUser().getId() : null;
+        adapter = new UserSearchAdapter(currentUserId);
         rvSearchResults.setAdapter(adapter);
 
         etSearch = findViewById(R.id.etSearch);
         ivProfile = findViewById(R.id.ivProfile);
         tvResultCount = findViewById(R.id.tvResultCount);
+        tvSectionTitle = findViewById(R.id.tvSectionTitle);
+        layoutLoading = findViewById(R.id.layoutLoading);
+        layoutEmpty = findViewById(R.id.layoutEmpty);
+
+        adapter.setOnUserClickListener(user -> {
+            String uname = user.getUsername();
+            if (uname != null) {
+                Intent intent = new Intent(this, UserProfileActivity.class);
+                intent.putExtra(UserProfileActivity.EXTRA_USERNAME, uname);
+                startActivity(intent);
+            }
+        });
+
+        adapter.setOnFollowClickListener((user, position) -> {
+            String uname = user.getUsername();
+            if (uname == null) return;
+            if (user.isFollowing()) {
+                followRepository.unfollowUser(uname).observe(this, r -> {
+                    if (r.status == Resource.Status.SUCCESS) {
+                        adapter.updateFollowState(position, false);
+                    }
+                });
+            } else {
+                followRepository.followUser(uname).observe(this, r -> {
+                    if (r.status == Resource.Status.SUCCESS) {
+                        adapter.updateFollowState(position, true);
+                    }
+                });
+            }
+        });
     }
 
     private void loadProfileImage() {
@@ -90,8 +120,7 @@ public class SearchActivity extends AppCompatActivity {
         if (user != null) {
             String avatarUrl = user.getEffectiveAvatarUrl();
             if (avatarUrl != null && !avatarUrl.isEmpty()) {
-                Glide.with(this)
-                        .load(avatarUrl)
+                Glide.with(this).load(avatarUrl)
                         .placeholder(R.drawable.ic_person)
                         .error(R.drawable.ic_person)
                         .circleCrop()
@@ -100,265 +129,101 @@ public class SearchActivity extends AppCompatActivity {
         }
     }
 
-    /**
-     * Load initial trending/public snippets when search screen opens
-     */
-    private void loadInitialSnippets() {
+    private void loadSuggestedUsers() {
+        tvSectionTitle.setText("Suggested People");
         showLoading(true);
 
-        dashboardRepository.getTrendingSnippets(20).observe(this, resource -> {
+        searchRepository.searchUsers("", 20).observe(this, resource -> {
+            showLoading(false);
             if (resource.status == Resource.Status.SUCCESS && resource.data != null) {
-                allResults.clear();
-                for (group.eleven.snippet_sharing_app.data.model.SnippetCard card : resource.data) {
-                    allResults.add(mapSnippetCardToSearchResult(card));
-                }
-                adapter.setItems(allResults);
-                updateHeaderCount(allResults.size());
-                showLoading(false);
-                showEmptyState(allResults.isEmpty());
+                adapter.setUsers(resource.data);
+                updateCount(resource.data.size());
+                showEmpty(resource.data.isEmpty());
             } else if (resource.status == Resource.Status.ERROR) {
-                Log.e(TAG, "Failed to load initial snippets: " + resource.message);
-                showLoading(false);
-                showEmptyState(true);
+                adapter.setUsers(new ArrayList<>());
+                showEmpty(true);
             }
         });
     }
 
-    /**
-     * Search snippets using API
-     */
     private void performSearch(String query) {
         if (query.trim().isEmpty()) {
-            loadInitialSnippets();
+            loadSuggestedUsers();
             return;
         }
 
+        tvSectionTitle.setText("Results for \"" + query + "\"");
         showLoading(true);
 
-        searchRepository.searchSnippets(query, 30).observe(this, resource -> {
+        searchRepository.searchUsers(query.trim(), 30).observe(this, resource -> {
+            showLoading(false);
             if (resource.status == Resource.Status.SUCCESS && resource.data != null) {
-                allResults.clear();
-                for (Snippet snippet : resource.data) {
-                    allResults.add(mapSnippetToSearchResult(snippet));
-                }
-                adapter.setItems(allResults);
-                updateHeaderCount(allResults.size());
-                showLoading(false);
-                showEmptyState(allResults.isEmpty());
+                adapter.setUsers(resource.data);
+                updateCount(resource.data.size());
+                showEmpty(resource.data.isEmpty());
             } else if (resource.status == Resource.Status.ERROR) {
                 Log.e(TAG, "Search failed: " + resource.message);
-                showLoading(false);
-                // Fall back to local filtering if API fails
-                filterResultsLocally(query);
+                showEmpty(true);
             }
         });
-    }
-
-    /**
-     * Map Snippet model to SearchResult UI model
-     */
-    private SearchResult mapSnippetToSearchResult(Snippet snippet) {
-        String languageName = snippet.getLanguageName();
-        String languageColor = getLanguageColor(languageName);
-        String subtitle = snippet.getDescription() != null ? snippet.getDescription() : "";
-        String authorUsername = snippet.getUser() != null ? snippet.getUser().getUsername() : "user";
-        String authorName = "@" + authorUsername;
-        String code = snippet.getCode() != null ? snippet.getCode() : "";
-        String timeAgo = formatTimeAgo(snippet.getCreatedAt());
-
-        return new SearchResult(
-                snippet.getId(),
-                snippet.getTitle() != null ? snippet.getTitle() : "Untitled",
-                subtitle,
-                languageName,
-                languageColor,
-                code.length() > 300 ? code.substring(0, 300) + "..." : code,
-                authorName,
-                snippet.getFavoriteCount(),
-                snippet.getCommentCount(),
-                !"public".equals(snippet.getPrivacy()),
-                timeAgo
-        );
-    }
-
-    /**
-     * Map SnippetCard model to SearchResult UI model
-     */
-    private SearchResult mapSnippetCardToSearchResult(group.eleven.snippet_sharing_app.data.model.SnippetCard card) {
-        String languageBadge = card.getLanguageBadge() != null ? card.getLanguageBadge() : "Code";
-        String languageColor = getLanguageColor(languageBadge);
-        String code = card.getCodePreview() != null ? card.getCodePreview() : "";
-
-        return new SearchResult(
-                card.getId(),
-                card.getTitle() != null ? card.getTitle() : "Untitled",
-                card.getDescription() != null ? card.getDescription() : "",
-                languageBadge,
-                languageColor,
-                code,
-                "@" + (card.getAuthorUsername() != null ? card.getAuthorUsername() : "user"),
-                card.getLikesCount(),
-                card.getCommentsCount(),
-                !"public".equals(card.getVisibility()),
-                card.getUpdatedTime() != null ? card.getUpdatedTime() : ""
-        );
-    }
-
-    /**
-     * Get color for programming language
-     */
-    private String getLanguageColor(String language) {
-        if (language == null) return "#6B7280";
-        switch (language.toLowerCase()) {
-            case "javascript": return "#F7DF1E";
-            case "typescript": return "#3178C6";
-            case "python": return "#3776AB";
-            case "java": return "#B07219";
-            case "kotlin": return "#A97BFF";
-            case "swift": return "#FA7343";
-            case "go": return "#00ADD8";
-            case "rust": return "#DEA584";
-            case "c++": case "cpp": return "#00599C";
-            case "c#": case "csharp": return "#239120";
-            case "php": return "#777BB4";
-            case "ruby": return "#CC342D";
-            case "html": return "#E34F26";
-            case "css": return "#1572B6";
-            case "sql": return "#336791";
-            default: return "#6B7280";
-        }
-    }
-
-    /**
-     * Format timestamp to relative time
-     */
-    private String formatTimeAgo(String timestamp) {
-        if (timestamp == null) return "";
-        // Simple formatting - in production use a proper library
-        try {
-            // Just return a simple format for now
-            return "recently";
-        } catch (Exception e) {
-            return "";
-        }
     }
 
     private void setupListeners() {
-        // Back button
+        // Back
         findViewById(R.id.btnBack).setOnClickListener(v -> finish());
 
-        // Profile image click - navigate to profile
-        ivProfile.setOnClickListener(v -> {
-            startActivity(new Intent(this, ProfileActivity.class));
-        });
+        // Profile image
+        ivProfile.setOnClickListener(v -> startActivity(new Intent(this, ProfileActivity.class)));
 
-        // Save search button
-        findViewById(R.id.btnSaveSearch).setOnClickListener(v -> {
-            Toast.makeText(this, "Search saved!", Toast.LENGTH_SHORT).show();
-        });
-
-        // Clear search button
+        // Clear
         findViewById(R.id.btnClear).setOnClickListener(v -> {
             etSearch.setText("");
-            loadInitialSnippets();
+            loadSuggestedUsers();
         });
 
-        // Language filter button
-        findViewById(R.id.btnLanguageFilter).setOnClickListener(v -> {
-            Toast.makeText(this, "Language filter coming soon", Toast.LENGTH_SHORT).show();
-        });
-
-        // Sort filter button
-        findViewById(R.id.btnSortFilter).setOnClickListener(v -> {
-            Toast.makeText(this, "Sort options coming soon", Toast.LENGTH_SHORT).show();
-        });
-
-        // Filter button in search bar
-        findViewById(R.id.btnFilter).setOnClickListener(v -> {
-            Toast.makeText(this, "Advanced filters coming soon", Toast.LENGTH_SHORT).show();
-        });
-
-        // Search text change listener with debounce
+        // Search text with debounce
         etSearch.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-            }
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void afterTextChanged(Editable s) {}
 
             @Override
             public void onTextChanged(CharSequence s, int start, int before, int count) {
-                // Cancel any pending search
-                if (searchRunnable != null) {
-                    searchHandler.removeCallbacks(searchRunnable);
-                }
-
-                // Schedule new search with debounce
+                if (searchRunnable != null) searchHandler.removeCallbacks(searchRunnable);
                 searchRunnable = () -> performSearch(s.toString());
-                searchHandler.postDelayed(searchRunnable, SEARCH_DEBOUNCE_MS);
-            }
-
-            @Override
-            public void afterTextChanged(Editable s) {
+                searchHandler.postDelayed(searchRunnable, DEBOUNCE_MS);
             }
         });
 
-        // Handle keyboard search action
         etSearch.setOnEditorActionListener((v, actionId, event) -> {
             if (actionId == EditorInfo.IME_ACTION_SEARCH) {
-                // Cancel debounce and search immediately
-                if (searchRunnable != null) {
-                    searchHandler.removeCallbacks(searchRunnable);
-                }
+                if (searchRunnable != null) searchHandler.removeCallbacks(searchRunnable);
                 performSearch(etSearch.getText().toString());
                 return true;
             }
             return false;
         });
 
-        // Load More click
-        findViewById(R.id.btnLoadMore).setOnClickListener(v -> {
-            Toast.makeText(this, "Loading more results...", Toast.LENGTH_SHORT).show();
-        });
-    }
-
-    /**
-     * Filter results locally (fallback when API fails)
-     */
-    private void filterResultsLocally(String query) {
-        if (query.isEmpty()) {
-            adapter.setItems(allResults);
-            updateHeaderCount(allResults.size());
-            return;
-        }
-
-        List<SearchResult> filtered = new ArrayList<>();
-        String lowerQuery = query.toLowerCase();
-        for (SearchResult item : allResults) {
-            if (item.getTitle().toLowerCase().contains(lowerQuery) ||
-                    item.getLanguage().toLowerCase().contains(lowerQuery) ||
-                    item.getSubtitle().toLowerCase().contains(lowerQuery) ||
-                    item.getCodeSnippet().toLowerCase().contains(lowerQuery)) {
-                filtered.add(item);
-            }
-        }
-        adapter.setItems(filtered);
-        updateHeaderCount(filtered.size());
-        showEmptyState(filtered.isEmpty());
-    }
-
-    private void updateHeaderCount(int count) {
-        if (tvResultCount != null) {
-            tvResultCount.setText(getString(R.string.results_found, count));
-        }
+        // Dismiss keyboard on outside touch
+        View rootView = findViewById(android.R.id.content);
+        KeyboardUtils.setupKeyboardDismissOnOutsideTouch(this, rootView);
     }
 
     private void showLoading(boolean show) {
-        // No progress bar in layout - could add one later if needed
+        layoutLoading.setVisibility(show ? View.VISIBLE : View.GONE);
+        if (show) {
+            rvSearchResults.setVisibility(View.GONE);
+            layoutEmpty.setVisibility(View.GONE);
+        }
     }
 
-    private void showEmptyState(boolean show) {
-        // Just update the result count to show "0 results found" when empty
-        if (show) {
-            updateHeaderCount(0);
+    private void showEmpty(boolean show) {
+        layoutEmpty.setVisibility(show ? View.VISIBLE : View.GONE);
+        rvSearchResults.setVisibility(show ? View.GONE : View.VISIBLE);
+    }
+
+    private void updateCount(int count) {
+        if (tvResultCount != null) {
+            tvResultCount.setText(count > 0 ? count + " found" : "");
         }
     }
 
@@ -371,9 +236,6 @@ public class SearchActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        // Clean up handler
-        if (searchRunnable != null) {
-            searchHandler.removeCallbacks(searchRunnable);
-        }
+        if (searchRunnable != null) searchHandler.removeCallbacks(searchRunnable);
     }
 }

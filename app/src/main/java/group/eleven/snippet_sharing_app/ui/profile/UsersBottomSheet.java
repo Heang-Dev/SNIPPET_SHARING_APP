@@ -28,6 +28,8 @@ import group.eleven.snippet_sharing_app.api.ApiClient;
 import group.eleven.snippet_sharing_app.api.ApiService;
 import group.eleven.snippet_sharing_app.data.model.ApiResponse;
 import group.eleven.snippet_sharing_app.data.model.User;
+import group.eleven.snippet_sharing_app.data.repository.FollowRepository;
+import group.eleven.snippet_sharing_app.utils.Resource;
 import group.eleven.snippet_sharing_app.utils.SessionManager;
 import retrofit2.Call;
 import retrofit2.Callback;
@@ -58,6 +60,7 @@ public class UsersBottomSheet extends BottomSheetDialogFragment {
     private UserListAdapter adapter;
     private ApiService apiService;
     private SessionManager sessionManager;
+    private FollowRepository followRepository;
 
     public static UsersBottomSheet newInstance(String username, String type) {
         UsersBottomSheet fragment = new UsersBottomSheet();
@@ -90,6 +93,7 @@ public class UsersBottomSheet extends BottomSheetDialogFragment {
         // Initialize
         apiService = ApiClient.getApiService(requireContext());
         sessionManager = new SessionManager(requireContext());
+        followRepository = new FollowRepository(requireContext());
 
         // Find views
         rvUsers = view.findViewById(R.id.rvUsers);
@@ -158,8 +162,27 @@ public class UsersBottomSheet extends BottomSheetDialogFragment {
 
             @Override
             public void onFollowClick(User user, int position) {
-                // TODO: Implement follow/unfollow
-                Toast.makeText(requireContext(), "Follow: @" + user.getUsername(), Toast.LENGTH_SHORT).show();
+                String uname = user.getUsername();
+                if (uname == null) return;
+                if (user.isFollowing()) {
+                    followRepository.unfollowUser(uname).observe(getViewLifecycleOwner(), r -> {
+                        if (r.status == Resource.Status.SUCCESS) {
+                            adapter.updateFollowState(position, false);
+                            Toast.makeText(requireContext(), "Unfollowed @" + uname, Toast.LENGTH_SHORT).show();
+                        } else if (r.status == Resource.Status.ERROR) {
+                            Toast.makeText(requireContext(), "Failed to unfollow", Toast.LENGTH_SHORT).show();
+                        }
+                    });
+                } else {
+                    followRepository.followUser(uname).observe(getViewLifecycleOwner(), r -> {
+                        if (r.status == Resource.Status.SUCCESS) {
+                            adapter.updateFollowState(position, true);
+                            Toast.makeText(requireContext(), "Following @" + uname, Toast.LENGTH_SHORT).show();
+                        } else if (r.status == Resource.Status.ERROR) {
+                            Toast.makeText(requireContext(), "Failed to follow", Toast.LENGTH_SHORT).show();
+                        }
+                    });
+                }
             }
         });
 

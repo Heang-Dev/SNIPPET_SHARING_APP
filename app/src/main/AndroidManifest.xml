@@ -155,6 +155,21 @@
             android:name=".ui.favorites.FavoritesActivity"
             android:exported="false" />
 
+        <!-- Snippet Detail Activity -->
+        <activity
+            android:name=".ui.snippet.SnippetDetailActivity"
+            android:exported="false" />
+
+        <!-- Collection Detail Activity -->
+        <activity
+            android:name=".ui.snippet.CollectionDetailActivity"
+            android:exported="false" />
+
+        <!-- Public User Profile Activity -->
+        <activity
+            android:name=".ui.search.UserProfileActivity"
+            android:exported="false" />
+
         <activity
             android:name=".ui.search.SearchActivity"
             android:exported="false"

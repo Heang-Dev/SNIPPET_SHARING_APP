@@ -5,6 +5,7 @@ package group.eleven.snippet_sharing_app.data.model;
  */
 public class SnippetCard {
     private String id;
+    private String slug;
     private String title;
     private String description;
     private String languageBadge;
@@ -60,6 +61,14 @@ public class SnippetCard {
 
     public String getId() {
         return id;
+    }
+
+    public String getSlug() {
+        return slug;
+    }
+
+    public void setSlug(String slug) {
+        this.slug = slug;
     }
 
     public String getTitle() {
